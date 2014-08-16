@@ -1,0 +1,6 @@
+[submodule "bryton-gps-linux"]
+	path = bryton-gps-linux
+	url = https://github.com/Pitmairen/bryton-gps-linux.git
+[submodule "stravalib"]
+	path = stravalib
+	url = https://github.com/hozn/stravalib
