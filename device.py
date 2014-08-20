@@ -71,6 +71,7 @@ class DeviceMonitor (threading.Thread):
 
   # Start
   def start ( self ):
+    if self._run: return
     self._run = True
     self._id = inotifyx.init()
     self._wd = inotifyx.add_watch(self._id, self._conf['dev_path'],
@@ -79,9 +80,10 @@ class DeviceMonitor (threading.Thread):
   
   # Stop
   def stop ( self ):
+    if not self._run: return
     self._run = False
     inotifyx.rm_watch(self._id, self._wd)
-    os.close(self._Id)
+    os.close(self._id)
     self._id  = None
     self._wd  = None
 
@@ -118,12 +120,14 @@ class DeviceMonitor (threading.Thread):
       if not rs: continue
       for (fd,ev) in rs:
         if fd == self._id and ev & select.POLLIN: 
-          es = inotifyx.get_events(self._id)
-          for e in es:
-            if not (e.mask & inotifyx.IN_CREATE): continue
-            p = os.path.join(path, e.name)
-            if not exp.search(p): continue
-            self.added(p)
+          try:
+            es = inotifyx.get_events(self._id)
+            for e in es:
+              if not (e.mask & inotifyx.IN_CREATE): continue
+              p = os.path.join(path, e.name)
+              if not exp.search(p): continue
+              self.added(p)
+          except: break
 
 # ###########################################################################
 # Testing

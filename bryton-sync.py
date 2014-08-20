@@ -1,4 +1,4 @@
-##!/usr/bin/env python
+#!/usr/bin/env python
 #
 # bryton-sync.py - Main Application
 #
@@ -44,6 +44,32 @@ class Struct(object):
   def __init__(self, entries):
     self.__dict__.update(entries)
 
+# Daemonise
+def daemonise ( cwdir = None, umask = None ):
+  
+  # First child
+  pid = os.fork()
+  if ( pid > 0 ): sys.exit(0) # exit parent
+
+  # Initialise environment
+  os.setsid()
+  if ( cwdir ): os.chdir(cwdir)
+  if ( umask ): os.umask(umask)
+
+  # Second child
+  pid = os.fork()
+  if ( pid > 0 ): sys.exit(0) # exit parent
+
+  # Close std file handler
+  sys.stdout.flush()
+  sys.stderr.flush()
+  t = open('/dev/null', 'r')
+  os.dup2(t.fileno(), sys.stdin.fileno())
+  t = open('/dev/null', 'w')
+  os.dup2(t.fileno(), sys.stdout.fileno())
+  os.dup2(t.fileno(), sys.stderr.fileno())
+
+
 # ###########################################################################
 # Class
 # ###########################################################################
@@ -62,10 +88,32 @@ class BrytonSync ( threading.Thread ):
     self._devmon = DeviceMonitor(conf, self.device_add)
 
     # Strava connection
-    self.strava  = Strava(conf)
+    self._strava  = Strava(conf)
 
     # Libnotify
     Notify.init('bryton-sync')
+
+    # StatusIcon
+    self._statusicon = Gtk.StatusIcon()
+    self._statusicon.set_from_file('images/brytonsport.png')
+    self._statusicon.set_title('BrytonSync')
+    self._statusicon.connect('popup-menu', self.show_status_menu)
+
+    # Status menu
+    about = Gtk.MenuItem(label="About")
+    quit  = Gtk.MenuItem(label="Quit")
+    quit.connect('activate', self.quit)
+    self._statusmenu = Gtk.Menu()
+    self._statusmenu.append(about)
+    self._statusmenu.append(quit)
+
+  def quit ( self, x ):
+    self.stop()
+    Gtk.main_quit()
+  
+  def show_status_menu ( self, icon, button, time ):
+    self._statusmenu.show_all()
+    self._statusmenu.popup(None, None, None, None, button, time)
 
   # Notify
   def notify ( self, title, msg ):
@@ -116,6 +164,7 @@ class BrytonSync ( threading.Thread ):
 
   # Start file monitor
   def start ( self ):
+    if self._run: return
 
     # Create dirs
     tdir = os.path.expanduser(self._conf['track_dir'])
@@ -133,10 +182,12 @@ class BrytonSync ( threading.Thread ):
 
   # Stop
   def stop ( self ):
+    if not self._run: return
     self._run = False
     inotifyx.rm_watch(self._id, self._wd)
     self._id  = None
     self._wd  = None
+    self._devmon.stop()
   
   # File added
   def added ( self, tpath ):
@@ -153,7 +204,7 @@ class BrytonSync ( threading.Thread ):
 
       # Send to strava
       log('syncing %s'%  os.path.basename(tpath))
-      if self.strava.send_tcx(tpath):
+      if self._strava.send_tcx(tpath):
         open(spath, 'w') # create empty file
         return True
     except Exception, e:
@@ -250,6 +301,9 @@ if __name__ == '__main__':
     except: pass
     conf[p[0]] = p[1]
 
+  # Fork
+  #daemonise()
+
   # Start
   b = BrytonSync(conf)
   b.start()
@@ -258,6 +312,8 @@ if __name__ == '__main__':
   import signal
   signal.signal(signal.SIGINT, signal.SIG_DFL)
   Gdk.threads_init()
+
+  # Turn into daemon
   Gtk.main()
 
 # ###########################################################################
