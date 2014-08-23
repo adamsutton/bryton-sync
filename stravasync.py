@@ -157,7 +157,7 @@ class Strava:
   #
   # Send activity
   #
-  def send_tcx ( self, path ):
+  def send_activity ( self, path, type ):
 
     # Authenticate
     if not self.authenticate():
@@ -165,7 +165,7 @@ class Strava:
 
     # Send Activity
     try:
-      self._client.upload_activity(open(path), 'tcx')
+      self._client.upload_activity(open(path), type)
       log('activity submitted')
       return True
     except Exception, e:
@@ -174,6 +174,18 @@ class Strava:
       log('failed to upload [e=%s]' % e)
   
     return False
+  
+  #
+  # Send TCX
+  #
+  def send_tcx ( self, path ):
+    return self.send_activity(path, 'tcx')
+
+  #
+  # Send FIT
+  #
+  def send_fit ( self, path ):
+    return self.send_activity(path, 'fit')
 
 
 # ###########################################################################

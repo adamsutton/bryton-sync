@@ -4,3 +4,6 @@
 [submodule "stravalib"]
 	path = stravalib
 	url = https://github.com/hozn/stravalib
+[submodule "python-fitparse"]
+	path = python-fitparse
+	url = https://github.com/dtcooper/python-fitparse.git

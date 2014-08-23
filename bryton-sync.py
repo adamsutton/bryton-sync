@@ -30,10 +30,12 @@ from gi.repository import Gtk, Gdk, Notify
 # Local
 sys.path.insert(0, 'bryton-gps-linux/code')
 sys.path.insert(0, 'stravalib')
+sys.path.insert(0, 'python-fitparse')
 from brytongps  import export_fake_garmin
 from device     import DeviceMonitor
 from log        import log
 from stravasync import Strava
+from fit        import fit_activity
 
 # ###########################################################################
 # Helpers
@@ -68,7 +70,6 @@ def daemonise ( cwdir = None, umask = None ):
   t = open('/dev/null', 'w')
   os.dup2(t.fileno(), sys.stdout.fileno())
   os.dup2(t.fileno(), sys.stderr.fileno())
-
 
 # ###########################################################################
 # Class
@@ -122,7 +123,7 @@ class BrytonSync ( threading.Thread ):
     #n.set_data(title, msg)
     #n.set_timeout(1.0)
     #n.show()
-
+  
   # Device connected
   def device_add ( self, dev ):
     tdir = os.path.expanduser(self._conf['track_dir'])
@@ -144,7 +145,7 @@ class BrytonSync ( threading.Thread ):
       # Check if already cached?
       tm = time.gmtime(h.summary.start)
       ts = time.strftime('%Y%m%d%H%M%S', tm)
-      n = ts + '.tcx'
+      n = ts + '.fit'
       p = os.path.join(tdir, n)
       if os.path.exists(p): continue
 
@@ -153,14 +154,13 @@ class BrytonSync ( threading.Thread ):
       log('track found %s' % ts)
       self.notify('Track', 'Start: %s' % ts)
     
-      # Export track data
+      # Create directory
       if not os.path.exists(tdir):
         os.makedirs(tdir)
-      args = Struct({ 'no_whitespace' : False,
-                      'save_to'       : False,
-                      'out_name'      : p,
-                      'no_laps'       : False})
-      export_fake_garmin([h], args)
+
+      # Get track data
+      data = fit_activity(dev, h.merged_segments(True))
+      open(p, 'w').write(data)
 
   # Start file monitor
   def start ( self ):
@@ -197,6 +197,10 @@ class BrytonSync ( threading.Thread ):
       # Create directory
       if not os.path.exists(sdir):
         os.makedirs(sdir)
+      
+      # Ignore invalid types
+      if not tpath.endswith('.fit'):
+        return True
 
       # Ignore already synced
       spath = os.path.join(sdir, os.path.basename(tpath))
@@ -204,7 +208,7 @@ class BrytonSync ( threading.Thread ):
 
       # Send to strava
       log('syncing %s'%  os.path.basename(tpath))
-      if self._strava.send_tcx(tpath):
+      if self._strava.send_fit(tpath):
         open(spath, 'w') # create empty file
         return True
     except Exception, e:
