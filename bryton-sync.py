@@ -209,8 +209,11 @@ class BrytonSync ( threading.Thread ):
       # Send to strava
       log('syncing %s'%  os.path.basename(tpath))
       if self._strava.send_fit(tpath):
+        log('  sent')
         open(spath, 'w') # create empty file
         return True
+      else:
+        log('  failed')
     except Exception, e:
       log('error syncing [e=%s]' % e)
 
