@@ -116,23 +116,7 @@ def fit_crc ( data ):
 def fit_activity ( dev, track ):
   lmsg = 0
   data = ''
-
-  # file_id
-  data += fit_msg(
-    local_msg  = lmsg,
-    msg_name   = 'file_id',
-    msg_fields = [
-      'type', 'manufacturer', ('product', 'garmin_product'),
-      'serial_number', 'time_created'
-    ],
-    msg_data   = [
-      [
-        'activity', 'garmin', 'edge500',
-        int(dev.get_serial()) & 0xFFFFFFFF, int(time.time())
-      ],
-    ]
-  )
-  lmsg += 1
+  time = None
 
   # Create records (TODO: dynamic field list)
   rec_fields = [ 'timestamp', 'position_lat', 'position_long', 'altitude',
@@ -148,6 +132,7 @@ def fit_activity ( dev, track ):
           continue
     for tp, lp in seg:
       if not lp or not tp: continue # TODO: interpolate?
+      if time is None: time = lp.timestamp
       r = [ time2timestamp(lp.timestamp),
             deg2semicircle(tp.latitude), 
             deg2semicircle(tp.longitude),
@@ -157,6 +142,23 @@ def fit_activity ( dev, track ):
             kph2mps(lp.speed or 0.0),
             lp.temperature or 0]
       rec_data.append(r)
+
+  # file_id
+  data += fit_msg(
+    local_msg  = lmsg,
+    msg_name   = 'file_id',
+    msg_fields = [
+      'type', 'manufacturer', ('product', 'garmin_product'),
+      'serial_number', 'time_created'
+    ],
+    msg_data   = [
+      [
+        'activity', 'garmin', 'edge500',
+        int(dev.get_serial()) & 0xFFFFFFFF, time2timestamp(time),
+      ],
+    ]
+  )
+  lmsg += 1
   
   # records
   data += fit_msg(
