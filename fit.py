@@ -117,6 +117,7 @@ def fit_activity ( dev, track ):
   lmsg = 0
   data = ''
   time = None
+  ptp  = None
 
   # Create records (TODO: dynamic field list)
   rec_fields = [ 'timestamp', 'position_lat', 'position_long', 'altitude',
@@ -131,16 +132,19 @@ def fit_activity ( dev, track ):
         if not [1 for tp, lp in seg if tp is None]:
           continue
     for tp, lp in seg:
-      if not lp or not tp: continue # TODO: interpolate?
+      if not lp: continue
+      if not tp and lp.speed < 2.0: tp = ptp
+      if not tp: continue
+      ptp = tp
       if time is None: time = lp.timestamp
       r = [ time2timestamp(lp.timestamp),
             deg2semicircle(tp.latitude), 
             deg2semicircle(tp.longitude),
             tp.elevation,
-            lp.heartrate   or 0,
-            lp.cadence     or 0,
+            lp.heartrate     or 0,
+            lp.cadence       or 0,
             kph2mps(lp.speed or 0.0),
-            lp.temperature or 0]
+            lp.temperature   or 0]
       rec_data.append(r)
 
   # file_id
