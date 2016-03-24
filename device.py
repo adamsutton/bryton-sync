@@ -91,6 +91,7 @@ class DeviceMonitor (threading.Thread):
   def added ( self, path ):
     if not os.access(path, os.R_OK | os.W_OK):
       return
+    log('device: added %s' % path)
     deva    = DeviceAccess(path)
     deva.open()
     mod,dev = get_device(deva)

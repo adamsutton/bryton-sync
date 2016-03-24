@@ -31,7 +31,11 @@ from datetime import datetime
 def log ( msg ):
   now = datetime.now()
   tm  = now.strftime('%F %T')
-  print '%s - %s' % (tm, msg)
+  m   = '%s - %s' % (tm, msg)
+  print m
+  try:
+    open('/tmp/bryton-sync.log', 'a').write(m + '\n')
+  except: pass
 
 # ###########################################################################
 # Editor Configuration
