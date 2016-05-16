@@ -45,12 +45,18 @@ class Device:
   def __init__ ( self, mod, dev ):
     self._mod = mod
     self._dev = dev
+    self._ser = None
 
   def get_product ( self ):
     return 'Rider 40'
   
   def get_serial ( self ):
-    return self._dev.read_serial()
+    if not self._ser:
+      try:
+        self._ser = self._dev.read_serial()
+      except:
+        return 'Unknown'
+    return self._ser
 
   def get_history ( self ):
     return self._mod.read_history(self._dev)
@@ -61,13 +67,15 @@ class Device:
 class DeviceMonitor (threading.Thread):
 
   # Initialise monitor
-  def __init__ ( self, conf, add ):
-    threading.Thread.__init__(self)
+  def __init__ ( self, conf, add, rem = None ):
+    threading.Thread.__init__(self, name='DevMon')
     self._run  = False
     self._id   = None
     self._wd   = None
     self._conf = conf
     self._add  = add
+    self._rem  = rem
+    self._dev  = {}
 
   # Start
   def start ( self ):
@@ -75,7 +83,7 @@ class DeviceMonitor (threading.Thread):
     self._run = True
     self._id = inotifyx.init()
     self._wd = inotifyx.add_watch(self._id, self._conf['dev_path'],
-                                  inotifyx.IN_CREATE)
+                                  inotifyx.IN_CREATE | inotifyx.IN_DELETE)
     threading.Thread.start(self)
   
   # Stop
@@ -95,7 +103,17 @@ class DeviceMonitor (threading.Thread):
     deva    = DeviceAccess(path)
     deva.open()
     mod,dev = get_device(deva)
-    self._add(Device(mod, dev))
+    d       = Device(mod, dev)
+    self._dev[path] = d
+    self._add(d)
+
+  # Removed
+  def removed ( self, path ):
+    log('device: removed %s' % path)
+    if path in self._dev:
+      d = self._dev[path]
+      if self._rem: self._rem(d)
+      del self._dev[path]
 
   # Check for existing devices
   def scan ( self, path, exp ):
@@ -124,10 +142,14 @@ class DeviceMonitor (threading.Thread):
           try:
             es = inotifyx.get_events(self._id)
             for e in es:
-              if not (e.mask & inotifyx.IN_CREATE): continue
+              if not (e.mask & inotifyx.IN_CREATE | inotifyx.IN_DELETE):
+                continue
               p = os.path.join(path, e.name)
               if not exp.search(p): continue
-              self.added(p)
+              if e.mask & inotifyx.IN_CREATE:
+                self.added(p)
+              else:
+                self.removed(p)
           except: break
 
 # ###########################################################################
@@ -144,16 +166,15 @@ if __name__ == '__main__':
 
   'track_dir'     : '~/.bryton/trac'
   }
-  def added ( mod, dev ):
-    print mod
+  def added ( dev ):
     print dev
   dm = DeviceMonitor(CONF, added)
   dm.start()
   import time
   try:
-    while True: time.sleep(10.0)
+    while True:
+      time.sleep(10.0)
   except: pass
-  print 'stop'
   dm.stop()
   dm.join()
 
