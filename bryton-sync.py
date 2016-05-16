@@ -25,6 +25,9 @@
 import os, sys, time, re
 import threading, inotifyx, select
 from optparse      import OptionParser
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Notify', '0.7')
 from gi.repository import Gtk, Gdk, Notify
 
 # Local
@@ -79,14 +82,14 @@ class BrytonSync ( threading.Thread ):
 
   # Initialise
   def __init__ ( self, conf ):
-    threading.Thread.__init__(self)
+    threading.Thread.__init__(self, name='BrytonSync')
     self._run  = False
     self._conf = conf
     self._id   = None
     self._wd   = None
     
     # Initialise device monitor
-    self._devmon = DeviceMonitor(conf, self.device_add)
+    self._devmon = DeviceMonitor(conf, self.device_add, self.device_rem)
 
     # Strava connection
     self._strava  = Strava(conf)
@@ -117,12 +120,11 @@ class BrytonSync ( threading.Thread ):
     self._statusmenu.popup(None, None, None, None, button, time)
 
   # Notify
-  def notify ( self, title, msg ):
-    pass
-    #n = Notify.Notification.new(title, msg)
+  def notify ( self, title, msg, timeout = 2.0 ):
+    n = Notify.Notification.new(title, msg)
     #n.set_data(title, msg)
-    #n.set_timeout(1.0)
-    #n.show()
+    n.set_timeout(timeout * 1000)
+    n.show()
   
   # Device connected
   def device_add ( self, dev ):
@@ -162,8 +164,16 @@ class BrytonSync ( threading.Thread ):
       data = fit_activity(dev, h.merged_segments(True))
       open(p, 'w').write(data)
 
+  # Device removed
+  def device_rem ( self, dev ):
+    prod = dev.get_product()
+    ser  = dev.get_serial()
+    log('device removed (%s, %s)' % (prod, ser))
+    self.notify('Device Removed', 'Device: %s\nSerial: %s' % (prod, ser))
+
   # Start file monitor
   def start ( self ):
+    self.notify('Started', 'BrytonSync started')
     if self._run: return
 
     # Create dirs
