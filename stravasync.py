@@ -26,6 +26,8 @@ import os, sys, time, re
 import select
 import threading
 import urlparse
+import gi
+gi.require_version('WebKit', '3.0')
 from gi.repository import Gtk, Gdk, WebKit, Soup
 
 # Local
