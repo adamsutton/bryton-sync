@@ -104,11 +104,11 @@ class BrytonSync ( threading.Thread ):
     self._statusicon.connect('popup-menu', self.show_status_menu)
 
     # Status menu
-    about = Gtk.MenuItem(label="About")
+    #about = Gtk.MenuItem(label="About")
     quit  = Gtk.MenuItem(label="Quit")
     quit.connect('activate', self.quit)
     self._statusmenu = Gtk.Menu()
-    self._statusmenu.append(about)
+    #self._statusmenu.append(about)
     self._statusmenu.append(quit)
 
   def quit ( self, x ):
