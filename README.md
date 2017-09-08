@@ -20,6 +20,12 @@ a temperature sensor). FIT is also the current default format used by Garmin
 Edge devices. The file metadata will list the device as Garmin Edge 500 this is
 to ensure that Strava will use the Altimeter readings from the device.
 
+Stuff to Install
+----------------
+
+- sudo apt-get install python-pip python-inotifyx python-dateutil python-tz
+- sudo pip install py_sg units
+
 Windows
 -------
 

@@ -189,7 +189,24 @@ class Strava:
   def send_fit ( self, path ):
     return self.send_activity(path, 'fit')
 
+  #
+  # Send GPX
+  #
+  def send_gpx ( self, path ):
+    return self.send_activity(path, 'gpx')
 
+  #
+  # Get activities
+  #
+  def get_activities ( self, beg = None, end = None, limit = None ):
+
+    # Authenticate
+    if not self.authenticate():
+      return None
+
+    # Fetch
+    return self._client.get_activities(before=end, after=beg, limit=limit)
+      
 # ###########################################################################
 # Testing
 # ###########################################################################

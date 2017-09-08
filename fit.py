@@ -24,6 +24,7 @@
 # System
 import os, sys, time, re
 import struct
+from datetime import datetime
 
 # fitparse
 from fitparse.profile import MESSAGE_TYPES, FIELD_TYPES
@@ -35,6 +36,9 @@ from fitparse.utils   import calc_crc
 
 def time2timestamp ( tm ):
   return int(tm - 631065600)
+
+def time2isoformat ( tm ):
+  return datetime.fromtimestamp(tm).isoformat()
 
 def deg2semicircle ( deg ):
   sc  = deg / 180.0
@@ -116,49 +120,41 @@ def fit_crc ( data ):
 def fit_activity ( dev, track ):
   lmsg = 0
   data = ''
-  time = None
-  ptp  = None
 
   # Create records (TODO: dynamic field list)
   rec_fields = [ 'timestamp', 'position_lat', 'position_long', 'altitude',
                  'heart_rate', 'cadence', 'speed', 'temperature' ]
   rec_data   = []
-  first   = True
-  for seg in track:
-    seg = list(seg)
-    if first:
-      first = False
-      if len(seg) < 5:
-        if not [1 for tp, lp in seg if tp is None]:
-          continue
-    for tp, lp in seg:
-      if not lp: continue
-      if not tp and lp.speed < 2.0: tp = ptp
-      if not tp: continue
-      ptp = tp
-      if time is None: time = lp.timestamp
-      r = [ time2timestamp(lp.timestamp),
-            deg2semicircle(tp.latitude), 
-            deg2semicircle(tp.longitude),
-            tp.elevation,
-            lp.heartrate     or 0,
-            lp.cadence       or 0,
-            kph2mps(lp.speed or 0.0),
-            lp.temperature   or 0]
-      rec_data.append(r)
+  for p in track:
+    r = [ time2timestamp(p['timestamp']),
+          deg2semicircle(p['latitude']), 
+          deg2semicircle(p['longitude']),
+          p['altitude'],
+          p['heartrate']     if 'heartrate'   in p else 0,
+          p['cadence']       if 'cadence'     in p else 0,
+          kph2mps(p['speed'] if 'speed'       in p else 0,
+          p['temperature']   if 'temperature' in p else 0,
+        ]
+    rec_data.append(r)
 
   # file_id
   data += fit_msg(
     local_msg  = lmsg,
     msg_name   = 'file_id',
     msg_fields = [
-      'type', 'manufacturer', ('product', 'garmin_product'),
-      'serial_number', 'time_created'
+      'type', 
+      'manufacturer',
+      ('product', 'garmin_product'),
+      'serial_number',
+      'time_created'
     ],
     msg_data   = [
       [
-        'activity', 'garmin', 'edge500',
-        int(dev.get_serial()) & 0xFFFFFFFF, time2timestamp(time),
+        'activity',
+        'garmin',
+        'edge500',
+        int(dev.get_serial()) & 0xFFFFFFFF,
+        time2timestamp(track[0]['timestamp']),
       ],
     ]
   )
