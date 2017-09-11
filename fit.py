@@ -26,6 +26,10 @@ import os, sys, time, re
 import struct
 from datetime import datetime
 
+# Path
+d = os.path.dirname(sys.argv[0]) or '.'
+sys.path.insert(0, d + '/python-fitparse')
+
 # fitparse
 from fitparse.profile import MESSAGE_TYPES, FIELD_TYPES
 from fitparse.utils   import calc_crc
@@ -36,9 +40,6 @@ from fitparse.utils   import calc_crc
 
 def time2timestamp ( tm ):
   return int(tm - 631065600)
-
-def time2isoformat ( tm ):
-  return datetime.fromtimestamp(tm).isoformat()
 
 def deg2semicircle ( deg ):
   sc  = deg / 180.0
@@ -117,7 +118,7 @@ def fit_crc ( data ):
 #
 # Generate activity file
 #
-def fit_activity ( dev, track ):
+def fit_activity ( track ):
   lmsg = 0
   data = ''
 
@@ -130,10 +131,10 @@ def fit_activity ( dev, track ):
           deg2semicircle(p['latitude']), 
           deg2semicircle(p['longitude']),
           p['altitude'],
-          p['heartrate']     if 'heartrate'   in p else 0,
-          p['cadence']       if 'cadence'     in p else 0,
-          kph2mps(p['speed'] if 'speed'       in p else 0,
-          p['temperature']   if 'temperature' in p else 0,
+          p['heartrate']      if 'heartrate'   in p else 0,
+          p['cadence']        if 'cadence'     in p else 0,
+          kph2mps(p['speed']) if 'speed'       in p else 0,
+          p['temperature']    if 'temperature' in p else 0,
         ]
     rec_data.append(r)
 
@@ -153,7 +154,7 @@ def fit_activity ( dev, track ):
         'activity',
         'garmin',
         'edge500',
-        int(dev.get_serial()) & 0xFFFFFFFF,
+        0x00000000,
         time2timestamp(track[0]['timestamp']),
       ],
     ]
@@ -179,8 +180,32 @@ def fit_activity ( dev, track ):
 # Test
 # ###########################################################################
 
+# ###########################################################################
+# Main
+# ###########################################################################
+
 if __name__ == '__main__':
-  load(sys.argv[1])
+  import json
+  from optparse import OptionParser
+
+  # Command line
+  optp = OptionParser()
+  (opts, args) = optp.parse_args()
+  #print opts, args
+
+  # Load track
+  track = json.loads(open(args[0]).read())
+
+  # Convert to FIT
+  fit   = fit_activity(track)
+
+  # Output to file
+  if len(args) > 1:
+    open(args[1], 'w').write(fit)
+  
+  # Output to stdout
+  else:
+    print fit
 
 # ###########################################################################
 # Editor Configuration

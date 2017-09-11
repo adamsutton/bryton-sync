@@ -23,23 +23,27 @@
 
 # System
 import os, sys, time, re, json
-import threading, inotifyx, select, datetime
+import threading, inotifyx, select, datetime, shutil
 from optparse      import OptionParser
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Notify', '0.7')
 from gi.repository import Gtk, Gdk, Notify
 
+# Path
+d = os.path.dirname(sys.argv[0]) or '.'
+sys.path.insert(0, d + '/bryton-gps-linux/code')
+sys.path.insert(0, d + '/stravalib')
+sys.path.insert(0, d + '/python-fitparse')
+
 # Local
-sys.path.insert(0, 'bryton-gps-linux/code')
-sys.path.insert(0, 'stravalib')
-sys.path.insert(0, 'python-fitparse')
-from brytongps  import export_fake_garmin
+from brytongps  import export_fake_garmin, rider40
+from rider40    import haversine
 from device     import DeviceMonitor
 from log        import log
 from stravasync import Strava
 from fit        import fit_activity
-from gpx        import gpx_activity
+from gpx2       import gpx_activity
 
 # ###########################################################################
 # Helpers
@@ -76,25 +80,38 @@ def daemonise ( cwdir = None, umask = None ):
   os.dup2(t.fileno(), sys.stderr.fileno())
 
 # Fixup a track
-def track_fixup ( track ):
+def track_fixup ( track, movedist ):
   ret    = []
-  ignore = False
+  first  = False
   ptp    = None
 
   # Build to list of data points
   for seg in track:
     for tp, lp in seg:
+      if not lp: continue # not likely, faulty point
       if not tp: tp = ptp
-      if not lp or not tp: continue
+      if not tp: continue # no previous point yet
+
+      # Check for lack of movement
+      if ptp is not None:
+        d = abs(haversine(ptp.longitude, ptp.latitude,\
+                          tp.longitude, tp.latitude)) * 1000
+
+        # No movement
+        if d < movedist:
+          tp = ptp
+          if lp.cadence is not None:
+            lp.cadence = 0
+          if lp.speed is not None:
+            lp.speed = 0
+
+      # Record last point
       ptp = tp
 
-      # Ignore
-      if lp.speed < 2.0 and lp.cadence < 10:
-        if ignore:
-          continue
-        ignore = True
-      else:
-        ignore = False
+      # Ignore until valid first point
+      if lp.speed < 2.0 and lp.cadence < 10 and not first:
+        continue
+      first = True
 
       # Create data point
       d = {
@@ -109,7 +126,7 @@ def track_fixup ( track ):
         d['heartrate']   = lp.heartrate
       if lp.cadence is not None:
         d['cadence']     = lp.cadence
-      if lp.spped is not None:
+      if lp.speed is not None:
         d['speed']       = lp.speed
       ret.append(d)
 
@@ -222,7 +239,7 @@ class BrytonSync ( threading.Thread ):
         os.makedirs(tdir)
 
       # Get track data (from device)
-      track = track_fixup(h.merged_segments(True))
+      track = track_fixup(h.merged_segments(True), self._conf['move_distance'])
 
       # Save in JSON format
       open(p, 'w').write(json.dumps(track))
@@ -236,7 +253,7 @@ class BrytonSync ( threading.Thread ):
     self.notify('Device Removed', 'Device: %s\nSerial: %s' % (prod, ser))
 
   # Start file monitor
-  def start ( self ):
+  def start ( self, nosync ):
     self.notify('Started', 'BrytonSync started')
     if self._run: return
 
@@ -252,7 +269,7 @@ class BrytonSync ( threading.Thread ):
 
     # Start device monitor
     self._devmon.start()
-    threading.Thread.start(self)
+    if not nosync: threading.Thread.start(self)
 
   # Stop
   def stop ( self ):
@@ -305,18 +322,19 @@ class BrytonSync ( threading.Thread ):
       ext  = self._conf['format']
       path = '/tmp/bryton.' + ext
       if ext == 'fit':
-        open(path, 'w').write(fit_activity(track))
+        t = fit_activity(track)
       elif ext == 'gpx':
-        open(path, 'w').write(gpx_activity(track))
+        t = gpx_activity(track)
       else:
         return True
+      open(path, 'w').write(t)
 
       # Send to strava
       log('syncing %s'%  os.path.basename(tpath))
       if self._strava.send_activity(path, ext):
         self.notify('Track', 'Uploaded : %s' % tpath)
         log('  sent')
-        open(spath, 'w')
+        shutil.move(path, spath)
       else:
         log('  failed')
         # Will potentially try again next time
@@ -381,8 +399,10 @@ if __name__ == '__main__':
     'dev_path'      : '/dev/disk/by-id',
     'dev_regex'     : 'BRYTON',
 
-    'min_distance'  : 2.0,
-    'min_time'      : 300,
+    'min_distance'  : 2.0, # km
+    'min_time'      : 300, # sec
+
+    'move_distance' : 5.0, # metres (1.25/sec)
 
     'oldest'        : 5, # days
 
@@ -395,7 +415,7 @@ if __name__ == '__main__':
 
     'cookiepath'    : '~/.bryton/cookies.txt',
 
-    'format'        : 'gpx',
+    'format'        : 'fit',
   }
 
   # Parse command line
@@ -403,6 +423,10 @@ if __name__ == '__main__':
   optp.add_option('-c', '--conf', default='~/.brytonrc',
                   help='Specify path to configuration file')
   optp.add_option('-o', '--options', default=[], action='append')
+  optp.add_option('-f', '--fork', default=False, action='store_true',
+                  help='Fork into the background')
+  optp.add_option('--nosync', default=False, action='store_true',
+                  help='Do not sync tracks to strava')
   (opts,args) = optp.parse_args()
 
   # Load configuration
@@ -424,11 +448,11 @@ if __name__ == '__main__':
     conf[p[0]] = p[1]
 
   # Fork
-  #daemonise()
+  if opts.fork: daemonise()
 
   # Start
   b = BrytonSync(conf)
-  b.start()
+  b.start(opts.nosync)
 
   # Start GTK main thread
   import signal

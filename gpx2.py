@@ -74,6 +74,35 @@ def gpx_activity ( track ):
   gpx += '  </trk>\n'
   gpx += '</gpx>\n'
 
+  return gpx
+
+# ###########################################################################
+# Main
+# ###########################################################################
+
+if __name__ == '__main__':
+  import json
+  from optparse import OptionParser
+
+  # Command line
+  optp = OptionParser()
+  (opts, args) = optp.parse_args()
+  #print opts, args
+
+  # Load track
+  track = json.loads(open(args[0]).read())
+
+  # Convert to GPX
+  gpx   = gpx_activity(track)
+
+  # Output to file
+  if len(args) > 1:
+    open(args[1], 'w').write(gpx)
+  
+  # Output to stdout
+  else:
+    print gpx
+
 # ###########################################################################
 # Editor Configuration
 #
