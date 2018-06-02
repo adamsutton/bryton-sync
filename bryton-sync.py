@@ -38,12 +38,12 @@ sys.path.insert(0, d + '/python-fitparse')
 
 # Local
 from brytongps  import export_fake_garmin, rider40
-from rider40    import haversine
 from device     import DeviceMonitor
 from log        import log
 from stravasync import Strava
 from fit        import fit_activity
 from gpx2       import gpx_activity
+import track
 
 # ###########################################################################
 # Helpers
@@ -97,7 +97,7 @@ def track_fixup ( track, movedist ):
 
       # Check for lack of movement
       if ptp is not None:
-        d = abs(haversine(ptp.longitude, ptp.latitude,\
+        d = abs(track.haversine(ptp.longitude, ptp.latitude,\
                           tp.longitude, tp.latitude)) * 1000
 
         # No movement (if not static)
@@ -256,10 +256,11 @@ class BrytonSync ( threading.Thread ):
         os.makedirs(tdir)
 
       # Get track data (from device)
-      track = track_fixup(h.merged_segments(True), self._conf['move_distance'])
-
+      t = track.convert(h.merged_segments(True))
+      t = track.fixup(t, self._conf)
+      
       # Save in JSON format
-      open(p, 'w').write(json.dumps(track))
+      open(p, 'w').write(json.dumps(t))
       log('device[%s]: track cached' % (prod))
       
   # Device removed
@@ -270,7 +271,7 @@ class BrytonSync ( threading.Thread ):
     self.notify('Device Removed', 'Device: %s\nSerial: %s' % (prod, ser))
 
   # Start file monitor
-  def start ( self, nosync ):
+  def start ( self ):
     self.notify('Started', 'BrytonSync started')
     if self._run: return
 
@@ -286,7 +287,7 @@ class BrytonSync ( threading.Thread ):
 
     # Start device monitor
     self._devmon.start()
-    if not nosync: threading.Thread.start(self)
+    if not self._conf['nosync']: threading.Thread.start(self)
 
   # Stop
   def stop ( self ):
@@ -322,15 +323,8 @@ class BrytonSync ( threading.Thread ):
       log('sync: new track found %s' %\
           time.strftime('%F %T', time.gmtime(beg)))
 
-      # Ignore - (due to bug in submissions or too old)
-      if beg < 1504903341 or\
-         beg < (time.time() - int(self._conf['oldest'] * 86400)):
-        log('ignoring %s' % os.path.basename(tpath))
-        open(spath, 'w')
-        return True
-
       # See if this is already on strava (from somewhere else)
-      if on_strava(self._strava, beg, end):
+      if not self._conf['nosend'] and on_strava(self._strava, beg, end):
         log('sync: already found on strava')
         open(spath, 'w')
         return True
@@ -348,13 +342,20 @@ class BrytonSync ( threading.Thread ):
 
       # Send to strava
       log('syncing %s'%  os.path.basename(tpath))
-      if self._strava.send_activity(path, ext):
+      ok = False
+      if self._conf['nosend']:
+        log('  fake send')
+        ok = True
+      elif self._strava.send_activity(path, ext):
         self.notify('Track', 'Uploaded : %s' % tpath)
         log('  sent')
-        shutil.move(path, spath)
+        ok = True
       else:
         log('  failed')
         # Will potentially try again next time
+
+      if ok:
+        shutil.move(path, spath)
 
       return True
 
@@ -416,10 +417,13 @@ if __name__ == '__main__':
     'dev_path'      : '/dev/disk/by-id',
     'dev_regex'     : 'BRYTON',
 
-    'min_distance'  : 2.0, # km
-    'min_time'      : 300, # sec
+    'min_distance'  : 2.0,  # km
+    'min_time'      : 300,  # sec
+    'min_speed'     : 15.0, # km/h
 
     'move_distance' : 5.0, # metres (1.25/sec)
+
+    'update_period' : 1.0, # 1Hz
 
     'oldest'        : 5, # days
 
@@ -433,6 +437,9 @@ if __name__ == '__main__':
     'cookiepath'    : '~/.bryton/cookies.txt',
 
     'format'        : 'fit',
+
+    'nosync'        : False,
+    'nosend'        : False,
   }
 
   # Parse command line
@@ -444,6 +451,8 @@ if __name__ == '__main__':
                   help='Fork into the background')
   optp.add_option('--nosync', default=False, action='store_true',
                   help='Do not sync tracks to strava')
+  optp.add_option('--nosend', default=False, action='store_true',
+                  help='Fake the sync, but do not actually send')
   (opts,args) = optp.parse_args()
 
   # Load configuration
@@ -464,12 +473,15 @@ if __name__ == '__main__':
     except: pass
     conf[p[0]] = p[1]
 
+  if opts.nosync: conf['nosync'] = True
+  if opts.nosend: conf['nosend'] = True
+
   # Fork
   if opts.fork: daemonise()
 
   # Start
   b = BrytonSync(conf)
-  b.start(opts.nosync)
+  b.start()
 
   # Start GTK main thread
   import signal
