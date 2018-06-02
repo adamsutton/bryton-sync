@@ -164,8 +164,9 @@ def on_strava ( strava, beg, end ):
     e = time.mktime((a.start_date + a.elapsed_time).timetuple())
 
     # Match
-    if b >= beg and e <= end:
-      return True
+    if b >= beg and b <= end: return True
+    if e >= beg and e <= end: return True
+
   return False
   
 # ###########################################################################
