@@ -37,7 +37,7 @@ def time2isoformat ( t ):
 # Output GPX activity
 #
 
-def gpx_activity ( track ):
+def gpx_activity ( track, static = False ):
 
   # Header
   gpx = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n'
@@ -61,6 +61,8 @@ def gpx_activity ( track ):
     gpx += '          <gpxtpx:TrackPointExtension>\n'
     if 'cadence' in p:
       gpx += '            <gpxtpx:cad>%d</gpxtpx:cad>\n' % p['cadence']
+    if 'speed' in p:
+      gpx += '            <gpxtpx:speed>%0.3f</gpxtpx:speed>\n' % p['speed']
     if 'heartrate' in p:
       gpx += '            <gpxtpx:hr>%d</gpxtpx:hr>\n' % p['heartrate']
     if 'temperature' in p:

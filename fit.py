@@ -118,24 +118,37 @@ def fit_crc ( data ):
 #
 # Generate activity file
 #
-def fit_activity ( track ):
+def fit_activity ( track, static = False ):
   lmsg = 0
   data = ''
 
   # Create records (TODO: dynamic field list)
-  rec_fields = [ 'timestamp', 'position_lat', 'position_long', 'altitude',
-                 'heart_rate', 'cadence', 'speed', 'temperature' ]
+  rec_fields = [ 'timestamp', 'heart_rate', 'cadence', 'speed' ]
+  if not static:
+    rec_fields.extend(['position_lat', 'position_long', 'altitude', 'temperature'])
+  else:
+    rec_fields.extend(['distance'])
   rec_data   = []
   for p in track:
-    r = [ time2timestamp(p['timestamp']),
+    r = [
+          time2timestamp(p['timestamp']),
+          p['heartrate']      if 'heartrate'   in p else 0,
+          p['cadence']        if 'cadence'     in p else 0,
+          kph2mps(p['speed']) if 'speed'       in p else 0
+        ]
+    if not static:
+      r.extend(
+        [
           deg2semicircle(p['latitude']), 
           deg2semicircle(p['longitude']),
           p['altitude'],
-          p['heartrate']      if 'heartrate'   in p else 0,
-          p['cadence']        if 'cadence'     in p else 0,
-          kph2mps(p['speed']) if 'speed'       in p else 0,
           p['temperature']    if 'temperature' in p else 0,
-        ]
+        ])
+    else:
+      r.extend(
+        [
+          p['distance'] * 1000 if 'distance'   in p else 0
+        ])
     rec_data.append(r)
 
   # file_id

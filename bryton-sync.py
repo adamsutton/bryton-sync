@@ -81,9 +81,12 @@ def daemonise ( cwdir = None, umask = None ):
 
 # Fixup a track
 def track_fixup ( track, movedist ):
-  ret    = []
-  first  = False
-  ptp    = None
+  ret     = []
+  first   = False
+  ptp     = None
+  static  = True
+  start   = None
+  dist    = 0.0
 
   # Build to list of data points
   for seg in track:
@@ -97,21 +100,32 @@ def track_fixup ( track, movedist ):
         d = abs(haversine(ptp.longitude, ptp.latitude,\
                           tp.longitude, tp.latitude)) * 1000
 
-        # No movement
-        if d < movedist:
+        # No movement (if not static)
+        if not static and d < movedist:
           tp = ptp
           if lp.cadence is not None:
             lp.cadence = 0
           if lp.speed is not None:
             lp.speed = 0
 
+        # Moving
+        elif d > movedist:
+          static = False
+
       # Record last point
+      t   = 0.0
+      if ptp is not None:
+        t   = tp.timestamp - ptp.timestamp
       ptp = tp
 
       # Ignore until valid first point
       if lp.speed < 2.0 and lp.cadence < 10 and not first:
         continue
       first = True
+      start = lp.timestamp
+
+      # Distance (for static trainer)
+      dist += (lp.speed * t) / 3600.0
 
       # Create data point
       d = {
@@ -128,9 +142,11 @@ def track_fixup ( track, movedist ):
         d['cadence']     = lp.cadence
       if lp.speed is not None:
         d['speed']       = lp.speed
+        if static:
+          d['distance']  = dist
       ret.append(d)
 
-  return ret
+  return {'static': static, 'timestamp': start, 'track': ret}
 
 # Check if track exists on strava
 def on_strava ( strava, beg, end ):
@@ -300,8 +316,8 @@ class BrytonSync ( threading.Thread ):
 
       # Load the track
       track = json.loads(open(tpath).read())
-      beg   = track[0]['timestamp']
-      end   = track[-1]['timestamp']
+      beg   = track['track'][0]['timestamp']
+      end   = track['track'][-1]['timestamp']
       log('sync: new track found %s' %\
           time.strftime('%F %T', time.gmtime(beg)))
 
@@ -322,9 +338,9 @@ class BrytonSync ( threading.Thread ):
       ext  = self._conf['format']
       path = '/tmp/bryton.' + ext
       if ext == 'fit':
-        t = fit_activity(track)
+        t = fit_activity(track['track'], track['static'])
       elif ext == 'gpx':
-        t = gpx_activity(track)
+        t = gpx_activity(track['track'], track['static'])
       else:
         return True
       open(path, 'w').write(t)
