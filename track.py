@@ -177,7 +177,10 @@ def fixup_extrapolate ( track, conf ):
         if k not in delta:       continue
         np[k] = ret[-1][k] + delta[k]
       np['speed']     = ret[-1]['speed'] + ds
-      i               = ((ret[-1]['speed'] + np['speed']) / 2.0) / llf
+      if llf:
+        i = ((ret[-1]['speed'] + np['speed']) / 2.0) / llf
+      else:
+        i = 0.0
       np['latitude']  = ret[-1]['latitude']  + (i * dlat)
       np['longitude'] = ret[-1]['longitude'] + (i * dlon)
       ret.append(np)
